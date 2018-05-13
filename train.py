@@ -2,6 +2,9 @@ try:
     import comet_ml
 except ImportError as e:
     print('Unable to load comet_ml: {}'.format(e))
+    
+import torch
+torch.cuda.set_device(0)
 from torch.optim import Adam
 from torch.optim.lr_scheduler import LambdaLR
 from network import Generator, Discriminator
@@ -18,33 +21,37 @@ from plugins import *
 from utils import *
 from argparse import ArgumentParser
 from collections import OrderedDict
+import torchsample
+import pprint
 torch.manual_seed(1337)
 
 default_params = OrderedDict(
     result_dir='results',
-    exp_name='specs512',
+    exp_name='orig512',
     minibatch_size=16,
     lr_rampup_kimg=40,
     G_lr_max=0.001,
     D_lr_max=0.001,
-    total_kimg=3000,
+    total_kimg=300000,
     tick_kimg_default=20,
     image_snapshot_ticks=3,
     resume_network='',
+    resume_dir='',
     resume_time=0,
-    num_data_workers=16,
+    num_data_workers=32,
     random_seed=1337,
     progressive_growing=True,
-    comet_key='',
-    comet_project_name='None',
+    comet_key='55ZPExTofFcCTco3c0J4R6fDG',
+    comet_project_name= 'Orig',
     iwass_lambda=10.0,
     iwass_epsilon=0.001,
     iwass_target=1.0,
     save_dataset='',
     load_dataset='',
-    dataset_class='',
-    postprocessors=[],
+    dataset_class='Jp2ImageFolderDataset',
+    postprocessors=['ImageSaver'],
     checkpoints_dir='',
+    
 )
 
 
@@ -59,8 +66,9 @@ class InfiniteRandomSampler(RandomSampler):
 
 def load_models(resume_network, result_dir, logger):
     logger.log('Resuming {}'.format(resume_network))
-    G = torch.load(os.path.join(result_dir, resume_network.format('generator')))
-    D = torch.load(os.path.join(result_dir, resume_network.format('discriminator')))
+    G = torch.load(os.path.join(result_dir, resume_network.format('generator')), map_location={'cuda:0':'cuda:1'})
+    D = torch.load(os.path.join(result_dir, resume_network.format('discriminator')), map_location={'cuda:0':'cuda:1'})
+    print (list(G.state_dict().keys()))
     return G, D
 
 
@@ -72,6 +80,7 @@ def init_comet(params, trainer):
             name: str(params[name]) for name in params
         }
         experiment.log_multiple_params(hyperparams)
+        print ('Initialize comet')
         trainer.register_plugin(CometPlugin(
             experiment, [
                 'G_loss.epoch_mean',
@@ -88,10 +97,19 @@ def init_comet(params, trainer):
 
 
 def main(params):
+    #params['Jp2ImageFolderDataset']['transform'] = transforms=torchsample.transforms.Compose(
+    #                                                                                                          [torchsample.transforms.NumpyPad(size=(1,544*2,544*2),constant=-1), 
+    #                                                                                                          torchsample.transforms.NumpyRandomCrop(size=(512*2,512*2)),]
+    #                                                                                                          )
+    params['Jp2ImageFolderDataset']['is1024'] = False
+    params['Generator']['latent_size'] = 512
+    params['DepthManager']['lod_training_nimg'] = 100*1000
+    params['DepthManager']['lod_transition_nimg'] = 100*1000
+    
     if params['load_dataset']:
         dataset = load_pkl(params['load_dataset'])
     elif params['dataset_class']:
-        dataset = globals()[params['dataset_class']](**params[params['dataset_class']])
+        dataset = globals()[params['dataset_class']](**params[params['dataset_class']],)
         if params['save_dataset']:
             save_pkl(params['save_dataset'], dataset)
     else:
@@ -107,7 +125,7 @@ def main(params):
         stats_to_log.extend([
             'depth',
             'alpha',
-            'lod',
+            #'lod',
             'minibatch_size'
         ])
     stats_to_log.extend([
@@ -138,8 +156,9 @@ def main(params):
     ))
 
     def get_dataloader(minibatch_size):
+        print ('Minibatch size', minibatch_size)
         return DataLoader(dataset, minibatch_size, sampler=InfiniteRandomSampler(dataset),
-                          num_workers=params['num_data_workers'], pin_memory=False, drop_last=True)
+                          num_workers=params['num_data_workers'], pin_memory=True, drop_last=True, )
 
     def rl(bs):
         return lambda: random_latents(bs, latent_size)
