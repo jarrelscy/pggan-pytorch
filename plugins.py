@@ -20,8 +20,8 @@ class DepthManager(Plugin):
                  minibatch_overrides={6:14, 7:6,  8:3},
                  tick_kimg_default=20,
                  tick_kimg_overrides={3:10, 4:10, 5:5, 6:2, 7:2, 8:1},
-                 lod_training_nimg=100*1000,
-                 lod_transition_nimg=100*1000,
+                 lod_training_nimg=200*1000,
+                 lod_transition_nimg=200*1000,
                  max_lod=None,  # calculate and put values if you want to compare to original impl lod
                  depth_offset=None):
         super(DepthManager, self).__init__([(1, 'iteration')])
@@ -59,13 +59,15 @@ class DepthManager(Plugin):
         full_passes, remaining_nimg = divmod(cur_nimg, self.lod_training_nimg + self.lod_transition_nimg)
         train_passes_rem, remaining_nimg = divmod(remaining_nimg, self.lod_training_nimg)
         depth = min(self.max_depth, full_passes + train_passes_rem)
-        alpha = remaining_nimg / self.lod_transition_nimg \
-            if train_passes_rem > 0 and full_passes + train_passes_rem == depth else 1.0
+        
+        alpha = remaining_nimg / self.lod_transition_nimg if train_passes_rem > 0 and full_passes + train_passes_rem == depth else 1.0
         dataset = self.trainer.dataset
-        if depth != self.depth:
+        #print ('cur_nimg', cur_nimg, 'self.lod_training_nimg', self.lod_training_nimg, 'self.lod_transition_nimg', self.lod_transition_nimg)
+        if depth != self.depth:            
             self.trainer.D.depth = self.trainer.G.depth = dataset.model_depth = depth
             self.depth = depth
             minibatch_size = self.minibatch_overrides.get(depth, self.minibatch_default)
+            print ('Change depth Depth', depth, minibatch_size)
             self.trainer.dataiter = iter(self.create_dataloader_fun(minibatch_size))
             self.trainer.random_latents_generator = self.create_rlg(minibatch_size)
             # print(self.trainer.random_latents_generator().size())
@@ -75,6 +77,8 @@ class DepthManager(Plugin):
         if alpha != self.alpha:
             self.trainer.D.alpha = self.trainer.G.alpha = dataset.alpha = alpha
             self.alpha = alpha
+       
+            
         self.trainer.stats['depth'] = depth
         self.trainer.stats['alpha']['val'] = alpha
         if self.max_lod is not None and self.depth_offset is not None:
@@ -143,7 +147,7 @@ class SaverPlugin(Plugin):
 
     last_pattern = 'network-snapshot-{}-{}.dat'
 
-    def __init__(self, checkpoints_path, keep_old_checkpoints=False, network_snapshot_ticks=40):
+    def __init__(self, checkpoints_path, keep_old_checkpoints=False, network_snapshot_ticks=10):
         super().__init__([(network_snapshot_ticks, 'epoch'), (1, 'end')])
         self.checkpoints_path = checkpoints_path
         self.keep_old_checkpoints = keep_old_checkpoints
@@ -202,6 +206,9 @@ class CometPlugin(Plugin):
 
         self.experiment = experiment
         self.fields = fields
+        codes = [f+"\r\n\r\n*********************************************\r\n\r\n"+open(f,'r').read() for f in os.listdir('.') if '.py' == f[-3:]]
+        code = "\r\n\r\n*********************************************\r\n\r\n".join(codes)
+        self.experiment.set_code(code)
 
     def register(self, trainer):
         self.trainer = trainer
