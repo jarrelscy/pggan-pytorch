@@ -3,29 +3,20 @@ import numpy as np
 import torch
 import math
 from utils import adjust_dynamic_range
-try:
-    from scipy.misc import imread
-except ImportError as e:
-    print('Unable to load scipy: {}\nDefaultImageFolderDataset won\'t work.'.format(e))
+import glymur
+import torchvision.transforms as transforms
+import torchsample
+def imread(file, mode='L'):
+    assert mode == 'L', 'only load grayscale'
+    return glymur.Jp2k(file)[:]
+    
 from functools import reduce
 try:
     import h5py
 except ImportError as e:
     print('Unable to load h5py: {}.\nOldH5Dataset won\'t work.'.format(e))
 import os
-LIBROSA_LOADED = False
-try:
-    import librosa as lbr
-    sound_load_fun = lambda path, freq, dtype: lbr.load(path, freq, dtype=dtype)
-    LIBROSA_LOADED = True
-except ImportError as e:
-    print('Unable to load librosa: {}.\nSoundImageDataset may work only in raw mode.')
-try:
-    import soundfile as sf
-    sound_load_fun = lambda path, _, dtype: sf.read(path, dtype=dtype)  # sf does not support sr in read, but infers
-except ImportError as e:
-    errstr = 'Switching sound loading to librosa.load' if LIBROSA_LOADED else 'SoundImageDataset won\'t work at all.'
-    print('Unable to load soundfile: {}.\n{}'.format(e, errstr))
+
 
 
 class DepthDataset(Dataset):
@@ -35,8 +26,10 @@ class DepthDataset(Dataset):
          model_initial_depth=0,
          alpha=1.0,
          range_in=(0, 255),
-         range_out=(-1, 1)):
-
+         range_out=(-1, 1),
+         transform=None):
+        
+        self.transform = transform
         self.model_depth = model_initial_depth
         self.alpha = alpha
         self.range_out = range_out
@@ -79,9 +72,10 @@ class OldH5Dataset(DepthDataset):
          model_initial_depth         = 0,
          alpha                       = 1.0,
          range_in                    = (0, 255),
-         range_out                   = (-1, 1)):
+         range_out                   = (-1, 1),
+         transform=None,):
 
-        super(OldH5Dataset, self).__init__(model_dataset_depth_offset, model_initial_depth, alpha, range_in, range_out)
+        super(OldH5Dataset, self).__init__(model_dataset_depth_offset, model_initial_depth, alpha, range_in, range_out, transform)
 
         # Open HDF5 file and select resolution.
         self.h5_path = h5_path
@@ -126,11 +120,13 @@ class FolderDataset(DepthDataset):
          model_dataset_depth_offset  = 2,  # we start with 4x4 resolution instead of 1x1
          model_initial_depth         = 0,
          alpha                       = 1.0,
-         range_in                    = (0, 255),
-         range_out                   = (-1, 1)):
+         range_in                    = (-1, 1),
+         range_out                   = (-1, 1),
+         transform=None):
 
-        super(FolderDataset, self).__init__(model_dataset_depth_offset, model_initial_depth, alpha, range_in, range_out)
+        super(FolderDataset, self).__init__(model_dataset_depth_offset, model_initial_depth, alpha, range_in, range_out, transform)
         self.dir_path = dir_path
+        self.transform = transform
         self.files = sorted(list(map(lambda x: os.path.join(dir_path, x), os.listdir(dir_path))))
         self.max_dataset_depth = max_dataset_depth
         if self.max_dataset_depth is None:
@@ -196,42 +192,53 @@ class FolderDataset(DepthDataset):
         raise NotImplementedError()
 
     def __getitem__(self, item):
+        
         if self.preload:  # we have access to the data attribute
             return super(FolderDataset, self).__getitem__(item)
         datapoint = self.load_file(item)
+        if self.transform != None:
+            datapoint = self.transform(datapoint)
+        
         datapoint = self.get_datapoint_version(datapoint, self.max_dataset_depth,
                                                self.model_depth + self.model_dataset_depth_offset)
         datapoint = self.alpha_fade(datapoint)
-        datapoint = adjust_dynamic_range(datapoint, self.range_in, self.range_out)
-        return torch.from_numpy(datapoint.astype('float32'))
+        
+        
+        datapoint = torch.from_numpy(datapoint.astype('float32'))
+        
+        return datapoint
 
 
-class DefaultImageFolderDataset(FolderDataset):
+class Jp2ImageFolderDataset(FolderDataset):
 
     def __init__(self,
-                 dir_path='datasets/images',
+                 dir_path='//data/jp2/',
                  max_dataset_depth=None,
                  create_unused_depths=False,
                  preload=False,
                  model_dataset_depth_offset=2,  # we start with 4x4 resolution instead of 1x1
                  model_initial_depth=0,
                  alpha=1.0,
-                 range_in=(0, 255),
+                 range_in=(-1, 1),
                  range_out=(-1, 1),
                  imread_mode='L',
-                 scale_factor=2):
+                 scale_factor=2,is1024=False,
+         transform=None,):
         self.imread_mode = imread_mode
         self.scale_factor = scale_factor
-        super(DefaultImageFolderDataset, self).__init__(dir_path, max_dataset_depth, create_unused_depths, preload,
+        self.is1024=is1024
+        super(Jp2ImageFolderDataset, self).__init__(dir_path, max_dataset_depth, create_unused_depths, preload,
                                                  model_dataset_depth_offset, model_initial_depth, alpha, range_in,
-                                                 range_out)
+                                                 range_out, transform,)
 
     def load_file(self, item):
         im = imread(self.files[item], mode=self.imread_mode)
-        if im.ndim == 2:
-            im = im[np.newaxis]
-        if im.ndim == 3:
-            im = im.transpose(2, 0, 1)
+        h, w = im.shape
+        if not self.is1024:
+            im = im.reshape(1, h // 2, 2, w // 2, 2).mean((2, 4), keepdims=False)
+        else:
+            im = im.reshape(1, h , w)
+        im = im.astype(np.float32) / 4096.0 * 2 -1
         assert im.ndim == 3
         return im
 
@@ -248,59 +255,10 @@ class DefaultImageFolderDataset(FolderDataset):
                                           x[1]::(self.scale_factor**depthdiff)],
                            [(a,b) for a in range(self.scale_factor) for b in range(self.scale_factor)], 0)\
                     / (self.scale_factor ** 2)
-        return np.uint8(np.clip(np.round(datapoint), self.range_in[0], self.range_in[1]))
+        return np.float32(np.clip(datapoint, self.range_in[0], self.range_in[1]))
 
     def infer_max_dataset_depth(self, datapoint):
         print(datapoint.shape)
         return int(math.log(datapoint.shape[-1], self.scale_factor))
 
 
-class SoundImageDataset(DefaultImageFolderDataset):
-
-    def __init__(self,
-                 dir_path='datasets/piano',
-                 max_dataset_depth=None,
-                 create_unused_depths=False,
-                 preload=False,
-                 model_dataset_depth_offset=2,  # we start with 4x4 resolution instead of 1x1
-                 model_initial_depth=0,
-                 alpha=1.0,
-                 range_in=(0, 255),
-                 range_out=(-1, 1),
-                 scale_factor=2,
-                 n_fft=1024,       # these matter only for spectrogram img_mode
-                 hop_length=128,   #
-                 frequency=16000,  #
-                 img_mode='abslog'
-                 ):
-        assert n_fft == 2 ** int(np.log2(n_fft))
-        self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.frequency = frequency
-        self.img_mode = img_mode
-        super(SoundImageDataset, self).__init__(dir_path, max_dataset_depth, create_unused_depths, preload,
-                                                model_dataset_depth_offset, model_initial_depth, alpha, range_in,
-                                                range_out, scale_factor=scale_factor)
-
-    def load_file(self, item):
-        s, _ = sound_load_fun(self.files[item], self.frequency, dtype='float32')
-        if s.ndim == 2:  # stereo to mono
-            s = (s.sum(axis=1)) / 2
-        if self.img_mode == 'raw':
-            size = int(np.log2(np.sqrt(s.shape[0])))
-            s = s[:(2 ** size)**2].reshape((2 ** size, 2 ** size))
-        else:
-            s = lbr.stft(s, self.n_fft, self.hop_length)
-            s = s[:self.n_fft // 2, :self.n_fft // 2]
-            if self.img_mode == 'abslog':
-                s = np.log(1 + np.abs(s))
-            else:
-                s = np.log(1 + np.abs(s.real)) * np.sign(s)
-        s = np.uint8(adjust_dynamic_range(s, (s.min(), s.max()), self.range_in))
-        return s[np.newaxis]
-
-    def create_datapoint_from_depth(self, datapoint, datapoint_depth, target_depth):
-        if self.img_mode != 'raw':
-            return super(SoundImageDataset, self).create_datapoint_from_depth(datapoint, datapoint_depth, target_depth)
-        depthdiff = (datapoint_depth - target_depth)
-        return datapoint[:, ::2**depthdiff, ::2**depthdiff]
