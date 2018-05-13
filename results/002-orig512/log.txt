@@ -1,0 +1,272 @@
+{
+	'result_dir': 'results',
+	'exp_name': 'orig512',
+	'minibatch_size': 16,
+	'lr_rampup_kimg': 40,
+	'G_lr_max': 0.001,
+	'D_lr_max': 0.001,
+	'total_kimg': 300000,
+	'tick_kimg_default': 20,
+	'image_snapshot_ticks': 3,
+	'resume_network': '',
+	'resume_dir': '',
+	'resume_time': 0,
+	'num_data_workers': 32,
+	'random_seed': 1337,
+	'progressive_growing': True,
+	'comet_key': '55ZPExTofFcCTco3c0J4R6fDG',
+	'comet_project_name': 'Orig',
+	'iwass_lambda': 10.0,
+	'iwass_epsilon': 0.001,
+	'iwass_target': 1.0,
+	'save_dataset': '',
+	'load_dataset': '',
+	'dataset_class': 'Jp2ImageFolderDataset',
+	'postprocessors': ['ImageSaver'],
+	'checkpoints_dir': '',
+	'Trainer': {'D_training_repeats': 1, 'tick_nimg_default': 2000, 'resume_nimg': 0},
+	'Generator': {'fmap_base': 4096, 'fmap_decay': 1.0, 'fmap_max': 512, 'latent_size': 512, 'normalize_latents': True, 'wscale': True, 'pixelnorm': True, 'leakyrelu': True},
+	'Discriminator': {'fmap_base': 4096, 'fmap_decay': 1.0, 'fmap_max': 512, 'wscale': True, 'pixelnorm': False, 'leakyrelu': True},
+	'DepthManager': {'minibatch_default': 16, 'minibatch_overrides': {6: 14, 7: 6, 8: 3}, 'tick_kimg_default': 20, 'tick_kimg_overrides': {3: 10, 4: 10, 5: 5, 6: 2, 7: 2, 8: 1}, 'lod_training_nimg': 100000, 'lod_transition_nimg': 100000, 'max_lod': None, 'depth_offset': None},
+	'SaverPlugin': {'keep_old_checkpoints': False, 'network_snapshot_ticks': 10},
+	'OutputGenerator': {'samples_count': 6, 'output_snapshot_ticks': 3},
+	'Adam': {'betas': (0.0, 0.99), 'eps': 1e-08, 'weight_decay': 0},
+	'DepthDataset': {'model_dataset_depth_offset': 2, 'model_initial_depth': 0, 'alpha': 1.0, 'range_in': (0, 255), 'range_out': (-1, 1), 'transform': None},
+	'FolderDataset': {'max_dataset_depth': None, 'create_unused_depths': False, 'preload': False, 'model_dataset_depth_offset': 2, 'model_initial_depth': 0, 'alpha': 1.0, 'range_in': (-1, 1), 'range_out': (-1, 1), 'transform': None},
+	'Jp2ImageFolderDataset': {'dir_path': '//data/jp2/', 'max_dataset_depth': None, 'create_unused_depths': False, 'preload': False, 'model_dataset_depth_offset': 2, 'model_initial_depth': 0, 'alpha': 1.0, 'range_in': (-1, 1), 'range_out': (-1, 1), 'imread_mode': 'L', 'scale_factor': 2, 'is1024': False, 'transform': None},
+	'OldH5Dataset': {'h5_path': 'datasets/cifar10-32.h5', 'model_dataset_depth_offset': 2, 'max_images': None, 'model_initial_depth': 0, 'alpha': 1.0, 'range_in': (0, 255), 'range_out': (-1, 1), 'transform': None},
+	'ImageSaver': {'samples_path': '.', 'drange': (-1, 1), 'resolution': 512, 'create_subdirs': True},
+	'Postprocessor': {'samples_path': '.'},
+	'SoundSaver': {'samples_path': '.', 'drange': (-1, 1), 'resolution': 512, 'mode': 'abslog', 'sample_rate': 16000, 'hop_length': 128, 'create_subdirs': True, 'verbose': False, 'griffin_lim_iter': 100},
+}
+Generator (
+  (block0): GFirstBlock (
+    (c1): PGConv2d (
+      (conv): Conv2d(512, 512, kernel_size=(4, 4), stride=(1, 1), padding=(3, 3))
+      (act): LeakyReLU (0.2)
+    )
+    (c2): PGConv2d (
+      (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      (act): LeakyReLU (0.2)
+    )
+    (toRGB): PGConv2d (
+      (conv): Conv2d(512, 1, kernel_size=(1, 1), stride=(1, 1))
+    )
+  )
+  (blocks): ModuleList (
+    (0): GBlock (
+      (c1): PGConv2d (
+        (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (toRGB): PGConv2d (
+        (conv): Conv2d(512, 1, kernel_size=(1, 1), stride=(1, 1))
+      )
+    )
+    (1): GBlock (
+      (c1): PGConv2d (
+        (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (toRGB): PGConv2d (
+        (conv): Conv2d(512, 1, kernel_size=(1, 1), stride=(1, 1))
+      )
+    )
+    (2): GBlock (
+      (c1): PGConv2d (
+        (conv): Conv2d(512, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (toRGB): PGConv2d (
+        (conv): Conv2d(256, 1, kernel_size=(1, 1), stride=(1, 1))
+      )
+    )
+    (3): GBlock (
+      (c1): PGConv2d (
+        (conv): Conv2d(256, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (toRGB): PGConv2d (
+        (conv): Conv2d(128, 1, kernel_size=(1, 1), stride=(1, 1))
+      )
+    )
+    (4): GBlock (
+      (c1): PGConv2d (
+        (conv): Conv2d(128, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (toRGB): PGConv2d (
+        (conv): Conv2d(64, 1, kernel_size=(1, 1), stride=(1, 1))
+      )
+    )
+    (5): GBlock (
+      (c1): PGConv2d (
+        (conv): Conv2d(64, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (toRGB): PGConv2d (
+        (conv): Conv2d(32, 1, kernel_size=(1, 1), stride=(1, 1))
+      )
+    )
+    (6): GBlock (
+      (c1): PGConv2d (
+        (conv): Conv2d(32, 16, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(16, 16, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (toRGB): PGConv2d (
+        (conv): Conv2d(16, 1, kernel_size=(1, 1), stride=(1, 1))
+      )
+    )
+  )
+)
+Total nuber of parameters in Generator: 18353880
+Discriminator (
+  (blocks): ModuleList (
+    (0): DBlock (
+      (fromRGB): PGConv2d (
+        (conv): Conv2d(1, 16, kernel_size=(1, 1), stride=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c1): PGConv2d (
+        (conv): Conv2d(16, 16, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(16, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+    )
+    (1): DBlock (
+      (fromRGB): PGConv2d (
+        (conv): Conv2d(1, 32, kernel_size=(1, 1), stride=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c1): PGConv2d (
+        (conv): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(32, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+    )
+    (2): DBlock (
+      (fromRGB): PGConv2d (
+        (conv): Conv2d(1, 64, kernel_size=(1, 1), stride=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c1): PGConv2d (
+        (conv): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+    )
+    (3): DBlock (
+      (fromRGB): PGConv2d (
+        (conv): Conv2d(1, 128, kernel_size=(1, 1), stride=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c1): PGConv2d (
+        (conv): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(128, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+    )
+    (4): DBlock (
+      (fromRGB): PGConv2d (
+        (conv): Conv2d(1, 256, kernel_size=(1, 1), stride=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c1): PGConv2d (
+        (conv): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+    )
+    (5): DBlock (
+      (fromRGB): PGConv2d (
+        (conv): Conv2d(1, 512, kernel_size=(1, 1), stride=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c1): PGConv2d (
+        (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+    )
+    (6): DBlock (
+      (fromRGB): PGConv2d (
+        (conv): Conv2d(1, 512, kernel_size=(1, 1), stride=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c1): PGConv2d (
+        (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+    )
+    (7): DLastBlock (
+      (fromRGB): PGConv2d (
+        (conv): Conv2d(1, 512, kernel_size=(1, 1), stride=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (stddev): MinibatchStddev (
+      )
+      (c1): PGConv2d (
+        (conv): Conv2d(513, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+      (c2): PGConv2d (
+        (conv): Conv2d(512, 512, kernel_size=(4, 4), stride=(1, 1))
+        (act): LeakyReLU (0.2)
+      )
+    )
+  )
+  (linear): Linear (512 -> 1)
+)
+Total nuber of parameters in Discriminator: 18361521
+tick:     1	kimg:   20.000	depth: 0	alpha: 1.00	minibatch_size: 16	time: 0:10:33.993476	sec.tick: 634.0	sec.kimg: 31.7	G_loss: 0.7406	D_loss: -0.8904	D_real: -0.3819	D_fake: -0.7366
+tick:     2	kimg:   40.000	depth: 0	alpha: 1.00	minibatch_size: 16	time: 0:20:47.402331	sec.tick: 613.4	sec.kimg: 30.7	G_loss: 0.1725	D_loss: -0.3530	D_real: -0.3080	D_fake: -0.1492
