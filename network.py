@@ -16,9 +16,8 @@ class PGConv2d(nn.Module):
         self.conv = nn.Conv2d(ch_in, ch_out, ksize, stride, pad)
         init(self.conv.weight)
         if wscale:
-            c = torch.sqrt(torch.mean(self.conv.weight.data ** 2))            
+            c = np.sqrt(torch.mean(self.conv.weight ** 2).item())            
             self.conv.weight.data /= c
-            self.register_buffer('c', c)
         else:
             self.c = 1.0
         self.eps = 1e-8
