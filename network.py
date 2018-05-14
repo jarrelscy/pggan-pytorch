@@ -27,7 +27,6 @@ class PGConv2d(nn.Module):
             self.act = nn.LeakyReLU(0.2) if act == 'lrelu' else nn.ReLU()
         else:
             self.act = None
-        self.c = self.c.cuda()
         self.conv.cuda()
 
     def forward(self, x):
