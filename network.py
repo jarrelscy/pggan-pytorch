@@ -16,10 +16,11 @@ class PGConv2d(nn.Module):
         self.conv = nn.Conv2d(ch_in, ch_out, ksize, stride, pad)
         init(self.conv.weight)
         if wscale:
-            self.c = np.sqrt(torch.mean(self.conv.weight.data ** 2))
-            self.conv.weight.data /= self.c
+            c = torch.sqrt(torch.mean(self.conv.weight.data ** 2))            
+            self.conv.weight.data /= c
+            self.register_buffer('c', c)
         else:
-            self.c = 1.
+            self.c = 1.0
         self.eps = 1e-8
 
         self.pixelnorm = pixelnorm
@@ -27,10 +28,12 @@ class PGConv2d(nn.Module):
             self.act = nn.LeakyReLU(0.2) if act == 'lrelu' else nn.ReLU()
         else:
             self.act = None
+        
         self.conv.cuda()
 
     def forward(self, x):
         h = x * self.c
+        #print (h.is_contiguous(), h.size(), self.conv.weight.size(), h.type(), self.conv.weight.type())
         h = self.conv(h)
         if self.act is not None:
             h = self.act(h)
@@ -136,7 +139,7 @@ class Generator(nn.Module):
             else:
                 preult_rgb = 0
             h = preult_rgb * (1-self.alpha) + ult * self.alpha
-        return h
+        return F.tanh(h)
 
 
 class DBlock(nn.Module):

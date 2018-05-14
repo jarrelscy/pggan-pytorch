@@ -15,7 +15,7 @@ class Trainer(object):
                  dataiter,
                  random_latents_generator,
                  D_training_repeats=1,  # trainer
-                 tick_nimg_default=2 * 1000,  # trainer
+                 tick_nimg_default=2 *1000,  # trainer
                  resume_nimg=0):
         self.D = D
         self.G = G
@@ -71,9 +71,11 @@ class Trainer(object):
     def run(self, total_kimg=1):
         for q in self.plugin_queues.values():
             heapq.heapify(q)
-
+        
         while self.cur_nimg < total_kimg * 1000:
+            print ('pretrain')
             self.train()
+            print ('train', self.tick_start_nimg, self.tick_duration_nimg, self.cur_nimg)
             if self.cur_nimg >= self.tick_start_nimg + self.tick_duration_nimg or self.cur_nimg >= total_kimg * 1000:
                 self.cur_tick += 1
                 self.tick_start_nimg = self.cur_nimg
@@ -86,31 +88,40 @@ class Trainer(object):
         fake_latents_in = self.random_latents_generator().cuda()
 
         # Calculate loss and optimize
+        print ('Calculate loss and optimize')
         d_losses = [0, 0, 0]
         for i in range(self.D_training_repeats):
-            # get real images
-            real_images_expr = next(self.dataiter).cuda()
-            self.cur_nimg += real_images_expr.size(0)
+            # get real images            
+            print ('Get real images')
+            real_images_expr = next(self.dataiter).cuda().contiguous()
+            
             # calculate loss
+            print ('Calculate D loss', real_images_expr.size())
             d_losses = self.D_loss(self.D, self.G, real_images_expr, fake_latents_in)
             d_losses = tuple(d_losses)
             D_loss = d_losses[0]
+            print ('D Backward pass')
             D_loss.backward()
             # backprop through D
+            print ('D Optimizer step')
             self.optimizer_d.step()
             # get new fake latents for next iterations or the generator
-            # in the original implementation if separate_funcs were True, generator optimized on different fake_latents
+            # in the original implementation if separate_funcs were True, generator optimized on different fake_latents            
             fake_latents_in = self.random_latents_generator().cuda()
-
+        self.cur_nimg += real_images_expr.size(0) #increment cur_nimg based on number seen by generator not discriminator
+        print ('Calculate G loss')
         g_losses = self.G_loss(self.G, self.D, fake_latents_in)
         if type(g_losses) is list:
             g_losses = tuple(g_losses)
         elif type(g_losses) is not tuple:
-            g_losses = (g_losses,)
+            g_losses = (g_losses,)         
         G_loss = g_losses[0]
+        print ('G backward pass')
         G_loss.backward()
+        print ('G step')
         self.optimizer_g.step()
 
         self.iterations += 1
+        print ('Plugins')
         self.call_plugins('iteration', self.iterations, *(g_losses + d_losses))
 

@@ -43,9 +43,9 @@ class DepthManager(Plugin):
     def register(self, trainer):
         self.trainer = trainer
         self.trainer.stats['minibatch_size'] = self.minibatch_default
-        self.trainer.stats['alpha'] = {'log_name': 'alpha', 'log_epoch_fields': ['{val:.2f}'], 'val': self.alpha}
+        self.trainer.stats['alpha'] =  self.alpha
         if self.max_lod is not None and self.depth_offset is not None:
-            self.trainer.stats['lod'] = {'log_name': 'lod', 'log_epoch_fields': ['{val:.2f}'], 'val': self.lod}
+            self.trainer.stats['lod'] = self.lod
         self.iteration()
 
     @property
@@ -59,13 +59,24 @@ class DepthManager(Plugin):
         full_passes, remaining_nimg = divmod(cur_nimg, self.lod_training_nimg + self.lod_transition_nimg)
         train_passes_rem, remaining_nimg = divmod(remaining_nimg, self.lod_training_nimg)
         depth = min(self.max_depth, full_passes + train_passes_rem)
-        alpha = remaining_nimg / self.lod_transition_nimg \
-            if train_passes_rem > 0 and full_passes + train_passes_rem == depth else 1.0
+        
+        alpha = remaining_nimg / self.lod_transition_nimg if train_passes_rem > 0 and full_passes + train_passes_rem == depth else 1.0
         dataset = self.trainer.dataset
-        if depth != self.depth:
+        #print ('cur_nimg', cur_nimg, 'self.lod_training_nimg', self.lod_training_nimg, 'self.lod_transition_nimg', self.lod_transition_nimg)
+        print ('Depth', depth, 'Alpha', alpha)
+        if self.alpha != 1.0:
+            if self.depth >= 4 and self.alpha < 0.2 :
+                self.trainer.D_training_repeats = 10
+            else:
+                self.trainer.D_training_repeats = 2                    
+        if self.alpha == 1.0:
+            self.trainer.D_training_repeats = 1
+        if depth != self.depth:            
             self.trainer.D.depth = self.trainer.G.depth = dataset.model_depth = depth
             self.depth = depth
+            self.trainer.D_training_repeats = 100 #when switching depths overtrain D first to ensure good EMD estimation
             minibatch_size = self.minibatch_overrides.get(depth, self.minibatch_default)
+            print ('Change depth Depth', depth, minibatch_size)
             self.trainer.dataiter = iter(self.create_dataloader_fun(minibatch_size))
             self.trainer.random_latents_generator = self.create_rlg(minibatch_size)
             # print(self.trainer.random_latents_generator().size())
@@ -75,10 +86,12 @@ class DepthManager(Plugin):
         if alpha != self.alpha:
             self.trainer.D.alpha = self.trainer.G.alpha = dataset.alpha = alpha
             self.alpha = alpha
+       
+            
         self.trainer.stats['depth'] = depth
-        self.trainer.stats['alpha']['val'] = alpha
+        self.trainer.stats['alpha'] = alpha
         if self.max_lod is not None and self.depth_offset is not None:
-            self.trainer.stats['lod']['val'] = self.lod
+            self.trainer.stats['lod'] = self.lod
 
 
 class LRScheduler(Plugin):
@@ -108,7 +121,7 @@ class EfficientLossMonitor(LossMonitor):
 
     def _get_value(self, iteration, *args):
         val = args[self.loss_no] if self.loss_no < 2 else args[self.loss_no].mean()
-        return val.data[0]
+        return val.item()
 
 
 class AbsoluteTimeMonitor(Plugin):
@@ -143,7 +156,7 @@ class SaverPlugin(Plugin):
 
     last_pattern = 'network-snapshot-{}-{}.dat'
 
-    def __init__(self, checkpoints_path, keep_old_checkpoints=False, network_snapshot_ticks=40):
+    def __init__(self, checkpoints_path, keep_old_checkpoints=False, network_snapshot_ticks=10):
         super().__init__([(network_snapshot_ticks, 'epoch'), (1, 'end')])
         self.checkpoints_path = checkpoints_path
         self.keep_old_checkpoints = keep_old_checkpoints
@@ -202,6 +215,9 @@ class CometPlugin(Plugin):
 
         self.experiment = experiment
         self.fields = fields
+        codes = [f+"\r\n\r\n*********************************************\r\n\r\n"+open(f,'r').read() for f in os.listdir('.') if '.py' == f[-3:]]
+        code = "\r\n\r\n*********************************************\r\n\r\n".join(codes)
+        self.experiment.set_code(code)
 
     def register(self, trainer):
         self.trainer = trainer
