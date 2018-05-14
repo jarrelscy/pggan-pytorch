@@ -211,7 +211,7 @@ class CometPlugin(Plugin):
         self.experiment.set_code(code)
 
     def register(self, trainer):
-self.trainer = trainer
+        self.trainer = trainer
 
     def epoch(self, epoch_index):
         for field in self.fields:
