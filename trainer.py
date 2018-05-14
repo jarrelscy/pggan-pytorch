@@ -1,226 +1,127 @@
-try:
-    import comet_ml
-except ImportError as e:
-    print('Unable to load comet_ml: {}'.format(e))
-    
-import torch
-torch.cuda.set_device(0)
-from torch.optim import Adam
-from torch.optim.lr_scheduler import LambdaLR
-from network import Generator, Discriminator
-from wgan_gp_loss import wgan_gp_G_loss, wgan_gp_D_loss
-from functools import partial
-from trainer import Trainer
-import dataset
-from dataset import *
-import output_postprocess
-from output_postprocess import *
-from torch.utils.data import DataLoader
-from torch.utils.data.sampler import RandomSampler
-from plugins import *
-from utils import *
-from argparse import ArgumentParser
-from collections import OrderedDict
-import torchsample
-import pprint
-torch.manual_seed(1337)
-
-default_params = OrderedDict(
-    result_dir='results',
-    exp_name='orig512',
-    minibatch_size=16,
-    lr_rampup_kimg=40,
-    G_lr_max=0.001,
-    D_lr_max=0.001,
-    total_kimg=300000,
-    tick_kimg_default=20,
-    image_snapshot_ticks=3,
-    resume_network='',
-    resume_dir='',
-    resume_time=0,
-    num_data_workers=32,
-    random_seed=1337,
-    progressive_growing=True,
-    comet_key='',
-    comet_project_name= 'Orig',
-    iwass_lambda=10.0,
-    iwass_epsilon=0.001,
-    iwass_target=1.0,
-    save_dataset='',
-    load_dataset='',
-    dataset_class='Jp2ImageFolderDataset',
-    postprocessors=['ImageSaver'],
-    checkpoints_dir='',
-    
-)
+import heapq
 
 
-class InfiniteRandomSampler(RandomSampler):
+# Based on torch.utils.trainer.Trainer code.
+class Trainer(object):
 
-    def __iter__(self):
-        while True:
-            it = super().__iter__()
-            for x in it:
-                yield x
-
-
-def load_models(resume_network, result_dir, logger):
-    logger.log('Resuming {}'.format(resume_network))
-    G = torch.load(os.path.join(result_dir, resume_network.format('generator')), map_location={'cuda:0':'cuda:1'})
-    D = torch.load(os.path.join(result_dir, resume_network.format('discriminator')), map_location={'cuda:0':'cuda:1'})
-    print (list(G.state_dict().keys()))
-    return G, D
-
-
-def init_comet(params, trainer):
-    if params['comet_key']:
-        from comet_ml import Experiment
-        experiment = Experiment(api_key=params['comet_key'], project_name=params['comet_project_name'], log_code=False)
-        hyperparams = {
-            name: str(params[name]) for name in params
+    def __init__(self,
+                 D,
+                 G,
+                 D_loss,
+                 G_loss,
+                 optimizer_d,
+                 optimizer_g,
+                 dataset,
+                 dataiter,
+                 random_latents_generator,
+                 D_training_repeats=1,  # trainer
+                 tick_nimg_default=2 *1000,  # trainer
+                 resume_nimg=0):
+        self.D = D
+        self.G = G
+        self.D_loss = D_loss
+        self.G_loss = G_loss
+        self.D_training_repeats = D_training_repeats
+        self.optimizer_d = optimizer_d
+        self.optimizer_g = optimizer_g
+        self.dataiter = dataiter
+        self.dataset = dataset
+        self.cur_nimg = resume_nimg
+        self.random_latents_generator = random_latents_generator
+        self.tick_start_nimg = self.cur_nimg
+        self.tick_duration_nimg = tick_nimg_default
+        self.iterations = 0
+        self.cur_tick = 0
+        self.time = 0
+        self.stats = {
+            'kimg_stat': { 'val': self.cur_nimg / 1000., 'log_epoch_fields': ['{val:8.3f}'], 'log_name': 'kimg' },
+            'tick_stat': { 'val': self.cur_tick, 'log_epoch_fields': ['{val:5}'], 'log_name': 'tick'}
         }
-        experiment.log_multiple_params(hyperparams)
-        print ('Initialize comet')
-        trainer.register_plugin(CometPlugin(
-            experiment, [
-                'G_loss.epoch_mean',
-                'D_loss.epoch_mean',
-                'D_real.epoch_mean',
-                'D_fake.epoch_mean',
-                'sec.kimg',
-                'sec.tick',
-                'kimg_stat'
-            ] + (['depth', 'alpha'] if params['progressive_growing'] else [])
-        ))
-    else:
-        print('Comet_ml logging disabled.')
+        self.plugin_queues = {
+            'iteration': [],
+            'epoch': [],
+            's':    [],
+            'end':  []
+        }
 
+    def register_plugin(self, plugin):
+        plugin.register(self)
 
-def main(params):
-    #params['Jp2ImageFolderDataset']['transform'] = transforms=torchsample.transforms.Compose(
-    #                                                                                                          [torchsample.transforms.NumpyPad(size=(1,544*2,544*2),constant=-1), 
-    #                                                                                                          torchsample.transforms.NumpyRandomCrop(size=(512*2,512*2)),]
-    #                                                                                                          )
-    params['Jp2ImageFolderDataset']['is1024'] = False
-    params['Generator']['latent_size'] = 512
-    params['DepthManager']['lod_training_nimg'] = 100*1000
-    params['DepthManager']['lod_transition_nimg'] = 100*1000
-    
-    if params['load_dataset']:
-        dataset = load_pkl(params['load_dataset'])
-    elif params['dataset_class']:
-        dataset = globals()[params['dataset_class']](**params[params['dataset_class']],)
-        if params['save_dataset']:
-            save_pkl(params['save_dataset'], dataset)
-    else:
-        raise Exception('One of either load_dataset (path to pkl) or dataset_class needs to be specified.')
-    result_dir = create_result_subdir(params['result_dir'], params['exp_name'])
+        intervals = plugin.trigger_interval
+        if not isinstance(intervals, list):
+            intervals = [intervals]
+        for (duration, unit) in intervals:
+            queue = self.plugin_queues[unit]
+            queue.append((duration, len(queue), plugin))
 
-    losses = ['G_loss', 'D_loss', 'D_real', 'D_fake']
-    stats_to_log = [
-        'tick_stat',
-        'kimg_stat',
-    ]
-    if params['progressive_growing']:
-        stats_to_log.extend([
-            'depth',
-            'alpha',
-            #'lod',
-            'minibatch_size'
-        ])
-    stats_to_log.extend([
-        'time',
-        'sec.tick',
-        'sec.kimg'
-    ] + losses)
-    logger = TeeLogger(os.path.join(result_dir, 'log.txt'), stats_to_log, [(1, 'epoch')])
-    logger.log(params_to_str(params))
-    if params['resume_network']:
-        G, D = load_models(params['resume_network'], params['result_dir'], logger)
-    else:
-        G = Generator(dataset.shape, **params['Generator'])
-        D = Discriminator(dataset.shape, **params['Discriminator'])
-    if params['progressive_growing']:
-        assert G.max_depth == D.max_depth
-    G.cuda()
-    D.cuda()
-    latent_size = params['Generator']['latent_size']
+    def call_plugins(self, queue_name, time, *args):
+        args = (time,) + args
+        queue = self.plugin_queues[queue_name]
+        if len(queue) == 0:
+            return
+        while queue[0][0] <= time:
+            plugin = queue[0][2]
+            getattr(plugin, queue_name)(*args)
+            for trigger in plugin.trigger_interval:
+                if trigger[1] == queue_name:
+                    interval = trigger[0]
+            new_item = (time + interval, queue[0][1], plugin)
+            heapq.heappushpop(queue, new_item)
 
-    logger.log(str(G))
-    logger.log('Total nuber of parameters in Generator: {}'.format(
-        sum(map(lambda x: reduce(lambda a, b: a*b, x.size()), G.parameters()))
-    ))
-    logger.log(str(D))
-    logger.log('Total nuber of parameters in Discriminator: {}'.format(
-        sum(map(lambda x: reduce(lambda a, b: a*b, x.size()), D.parameters()))
-    ))
+    def run(self, total_kimg=1):
+        for q in self.plugin_queues.values():
+            heapq.heapify(q)
+        
+        while self.cur_nimg < total_kimg * 1000:
+            print ('pretrain')
+            self.train()
+            print ('train', self.tick_start_nimg, self.tick_duration_nimg, self.cur_nimg)
+            if self.cur_nimg >= self.tick_start_nimg + self.tick_duration_nimg or self.cur_nimg >= total_kimg * 1000:
+                self.cur_tick += 1
+                self.tick_start_nimg = self.cur_nimg
+                self.stats['kimg_stat']['val'] = self.cur_nimg / 1000.
+                self.stats['tick_stat']['val'] = self.cur_tick
+                self.call_plugins('epoch', self.cur_tick)
+        self.call_plugins('end', 1)
 
-    def get_dataloader(minibatch_size):
-        print ('Minibatch size', minibatch_size)
-        return DataLoader(dataset, minibatch_size, sampler=InfiniteRandomSampler(dataset),
-                          num_workers=params['num_data_workers'], pin_memory=True, drop_last=True, )
+    def train(self):
+        fake_latents_in = self.random_latents_generator().cuda()
 
-    def rl(bs):
-        return lambda: random_latents(bs, latent_size)
+        # Calculate loss and optimize
+        print ('Calculate loss and optimize')
+        d_losses = [0, 0, 0]
+        for i in range(self.D_training_repeats):
+            # get real images            
+            print ('Get real images')
+            real_images_expr = next(self.dataiter).cuda().contiguous()
+            self.cur_nimg += real_images_expr.size(0)
+            # calculate loss
+            print ('Calculate D loss', real_images_expr.size())
+            d_losses = self.D_loss(self.D, self.G, real_images_expr, fake_latents_in)
+            d_losses = tuple(d_losses)
+            D_loss = d_losses[0]
+            print ('D Backward pass')
+            D_loss.backward()
+            # backprop through D
+            print ('D Optimizer step')
+            self.optimizer_d.step()
+            # get new fake latents for next iterations or the generator
+            # in the original implementation if separate_funcs were True, generator optimized on different fake_latents            
+            fake_latents_in = self.random_latents_generator().cuda()
+        
+        print ('Calculate G loss')
+        g_losses = self.G_loss(self.G, self.D, fake_latents_in)
+        if type(g_losses) is list:
+            g_losses = tuple(g_losses)
+        elif type(g_losses) is not tuple:
+            g_losses = (g_losses,)         
+        G_loss = g_losses[0]
+        print ('G backward pass')
+        G_loss.backward()
+        print ('G step')
+        self.optimizer_g.step()
 
-    # Setting up learning rate and optimizers
-    opt_g = Adam(G.parameters(), params['G_lr_max'], **params['Adam'])
-    opt_d = Adam(D.parameters(), params['D_lr_max'], **params['Adam'])
+        self.iterations += 1
+        print ('Plugins')
+        self.call_plugins('iteration', self.iterations, *(g_losses + d_losses))
 
-    def rampup(cur_nimg):
-        if cur_nimg < params['lr_rampup_kimg'] * 1000:
-            p = max(0.0, 1 - cur_nimg / (params['lr_rampup_kimg'] * 1000))
-            return np.exp(-p * p * 5.0)
-        else:
-            return 1.0
-    lr_scheduler_d = LambdaLR(opt_d, rampup)
-    lr_scheduler_g = LambdaLR(opt_g, rampup)
-
-    mb_def = params['minibatch_size']
-    D_loss_fun = partial(wgan_gp_D_loss, return_all=True, iwass_lambda=params['iwass_lambda'],
-                         iwass_epsilon=params['iwass_epsilon'], iwass_target=params['iwass_target'])
-    G_loss_fun = wgan_gp_G_loss
-    trainer = Trainer(D, G, D_loss_fun, G_loss_fun,
-                      opt_d, opt_g, dataset, iter(get_dataloader(mb_def)), rl(mb_def), **params['Trainer'])
-    # plugins
-    if params['progressive_growing']:
-        max_depth = min(G.max_depth, D.max_depth)
-        trainer.register_plugin(DepthManager(get_dataloader, rl, max_depth, **params['DepthManager']))
-    for i, loss_name in enumerate(losses):
-        trainer.register_plugin(EfficientLossMonitor(i, loss_name))
-
-    checkpoints_dir = params['checkpoints_dir'] if params['checkpoints_dir'] else result_dir
-    trainer.register_plugin(SaverPlugin(checkpoints_dir, **params['SaverPlugin']))
-
-    def subsitute_samples_path(d):
-        return {k:(os.path.join(result_dir, v) if k == 'samples_path' else v) for k,v in d.items()}
-    postprocessors = [ globals()[x](**subsitute_samples_path(params[x])) for x in params['postprocessors'] ]
-    trainer.register_plugin(OutputGenerator(lambda x: random_latents(x, latent_size),
-                                            postprocessors, **params['OutputGenerator']))
-    trainer.register_plugin(AbsoluteTimeMonitor(params['resume_time']))
-    trainer.register_plugin(LRScheduler(lr_scheduler_d, lr_scheduler_g))
-    trainer.register_plugin(logger)
-    init_comet(params, trainer)
-    trainer.run(params['total_kimg'])
-    dataset.close()
-
-
-if __name__ == "__main__":
-    parser = ArgumentParser()
-    needarg_classes = [Trainer, Generator, Discriminator, DepthManager, SaverPlugin, OutputGenerator, Adam]
-    needarg_classes += get_all_classes(dataset)
-    needarg_classes += get_all_classes(output_postprocess)
-    excludes = {'Adam': {'lr'}}
-    default_overrides = {'Adam': {'betas': (0.0, 0.99)}}
-    auto_args = create_params(needarg_classes, excludes, default_overrides)
-    for k in default_params:
-        parser.add_argument('--{}'.format(k), type=partial(generic_arg_parse, hinttype=type(default_params[k])))
-    for cls in auto_args:
-        group = parser.add_argument_group(cls, 'Arguments for initialization of class {}'.format(cls))
-        for k in auto_args[cls]:
-            name = '{}.{}'.format(cls, k)
-            group.add_argument('--{}'.format(name), type=generic_arg_parse)
-            default_params[name] = auto_args[cls][k]
-    parser.set_defaults(**default_params)
-    params = get_structured_params(vars(parser.parse_args()))
-    main(params)
