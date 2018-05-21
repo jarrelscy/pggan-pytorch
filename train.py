@@ -21,6 +21,7 @@ from plugins import *
 from utils import *
 from argparse import ArgumentParser
 from collections import OrderedDict
+from cometkey import cometkey
 import torchsample
 import pprint
 torch.manual_seed(1337)
@@ -41,7 +42,7 @@ default_params = OrderedDict(
     num_data_workers=32,
     random_seed=1337,
     progressive_growing=True,
-    comet_key='55ZPExTofFcCTco3c0J4R6fDG',
+    comet_key=cometkey,
     comet_project_name= 'Orig',
     iwass_lambda=10.0,
     iwass_epsilon=0.001,

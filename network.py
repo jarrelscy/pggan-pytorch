@@ -137,7 +137,7 @@ class Generator(nn.Module):
             else:
                 preult_rgb = 0
             h = preult_rgb * (1-self.alpha) + ult * self.alpha
-        return F.tanh(h)
+        return h
 
 
 class DBlock(nn.Module):
