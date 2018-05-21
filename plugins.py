@@ -20,8 +20,8 @@ class DepthManager(Plugin):
                  minibatch_overrides={6:14, 7:6,  8:3},
                  tick_kimg_default=20,
                  tick_kimg_overrides={3:10, 4:10, 5:5, 6:2, 7:2, 8:1},
-                 lod_training_nimg=200*1000,
-                 lod_transition_nimg=200*1000,
+                 lod_training_nimg=100*1000,
+                 lod_transition_nimg=100*1000,
                  max_lod=None,  # calculate and put values if you want to compare to original impl lod
                  depth_offset=None):
         super(DepthManager, self).__init__([(1, 'iteration')])
@@ -43,9 +43,9 @@ class DepthManager(Plugin):
     def register(self, trainer):
         self.trainer = trainer
         self.trainer.stats['minibatch_size'] = self.minibatch_default
-        self.trainer.stats['alpha'] = {'log_name': 'alpha', 'log_epoch_fields': ['{val:.2f}'], 'val': self.alpha}
+        self.trainer.stats['alpha'] =  self.alpha
         if self.max_lod is not None and self.depth_offset is not None:
-            self.trainer.stats['lod'] = {'log_name': 'lod', 'log_epoch_fields': ['{val:.2f}'], 'val': self.lod}
+            self.trainer.stats['lod'] = self.lod
         self.iteration()
 
     @property
@@ -80,9 +80,9 @@ class DepthManager(Plugin):
        
             
         self.trainer.stats['depth'] = depth
-        self.trainer.stats['alpha']['val'] = alpha
+        self.trainer.stats['alpha'] = alpha
         if self.max_lod is not None and self.depth_offset is not None:
-            self.trainer.stats['lod']['val'] = self.lod
+            self.trainer.stats['lod'] = self.lod
 
 
 class LRScheduler(Plugin):
@@ -113,7 +113,6 @@ class EfficientLossMonitor(LossMonitor):
     def _get_value(self, iteration, *args):
         val = args[self.loss_no] if self.loss_no < 2 else args[self.loss_no].mean()
         return val.data[0]
-
 
 class AbsoluteTimeMonitor(Plugin):
 

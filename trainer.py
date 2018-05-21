@@ -108,7 +108,6 @@ class Trainer(object):
             # get new fake latents for next iterations or the generator
             # in the original implementation if separate_funcs were True, generator optimized on different fake_latents            
             fake_latents_in = self.random_latents_generator().cuda()
-        
         print ('Calculate G loss')
         g_losses = self.G_loss(self.G, self.D, fake_latents_in)
         if type(g_losses) is list:

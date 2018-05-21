@@ -97,15 +97,6 @@ def init_comet(params, trainer):
 
 
 def main(params):
-    #params['Jp2ImageFolderDataset']['transform'] = transforms=torchsample.transforms.Compose(
-    #                                                                                                          [torchsample.transforms.NumpyPad(size=(1,544*2,544*2),constant=-1), 
-    #                                                                                                          torchsample.transforms.NumpyRandomCrop(size=(512*2,512*2)),]
-    #                                                                                                          )
-    params['Jp2ImageFolderDataset']['is1024'] = False
-    params['Generator']['latent_size'] = 512
-    params['DepthManager']['lod_training_nimg'] = 100*1000
-    params['DepthManager']['lod_transition_nimg'] = 100*1000
-    
     if params['load_dataset']:
         dataset = load_pkl(params['load_dataset'])
     elif params['dataset_class']:
