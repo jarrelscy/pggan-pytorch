@@ -8,7 +8,7 @@
 	'total_kimg': 300000,
 	'tick_kimg_default': 20,
 	'image_snapshot_ticks': 3,
-	'resume_network': '',
+	'resume_network': '001-orig512/network-snapshot-{}-000550.dat',
 	'resume_dir': '',
 	'resume_time': 0,
 	'num_data_workers': 32,
@@ -24,7 +24,7 @@
 	'dataset_class': 'Jp2ImageFolderDataset',
 	'postprocessors': ['ImageSaver'],
 	'checkpoints_dir': '',
-	'Trainer': {'D_training_repeats': 1, 'tick_nimg_default': 2000, 'resume_nimg': 0},
+	'Trainer': {'D_training_repeats': 1, 'tick_nimg_default': 2000, 'resume_nimg': 550000},
 	'Generator': {'fmap_base': 4096, 'fmap_decay': 1.0, 'fmap_max': 512, 'latent_size': 512, 'normalize_latents': True, 'wscale': True, 'pixelnorm': True, 'leakyrelu': True},
 	'Discriminator': {'fmap_base': 4096, 'fmap_decay': 1.0, 'fmap_max': 512, 'wscale': True, 'pixelnorm': False, 'leakyrelu': True},
 	'DepthManager': {'minibatch_default': 16, 'minibatch_overrides': {6: 14, 7: 6, 8: 3}, 'tick_kimg_default': 20, 'tick_kimg_overrides': {3: 10, 4: 10, 5: 5, 6: 2, 7: 2, 8: 1}, 'lod_training_nimg': 100000, 'lod_transition_nimg': 100000, 'max_lod': None, 'depth_offset': None},
@@ -39,6 +39,7 @@
 	'Postprocessor': {'samples_path': '.'},
 	'SoundSaver': {'samples_path': '.', 'drange': (-1, 1), 'resolution': 512, 'mode': 'abslog', 'sample_rate': 16000, 'hop_length': 128, 'create_subdirs': True, 'verbose': False, 'griffin_lim_iter': 100},
 }
+Resuming 001-orig512/network-snapshot-{}-000550.dat
 Generator (
   (block0): GFirstBlock (
     (c1): PGConv2d (
@@ -268,5 +269,20 @@ Discriminator (
   (linear): Linear (512 -> 1)
 )
 Total nuber of parameters in Discriminator: 18361521
-tick:     1	kimg:   20.000	depth: 0	alpha: 1.00	minibatch_size: 16	time: 0:10:33.993476	sec.tick: 634.0	sec.kimg: 31.7	G_loss: 0.7406	D_loss: -0.8904	D_real: -0.3819	D_fake: -0.7366
-tick:     2	kimg:   40.000	depth: 0	alpha: 1.00	minibatch_size: 16	time: 0:20:47.402331	sec.tick: 613.4	sec.kimg: 30.7	G_loss: 0.1725	D_loss: -0.3530	D_real: -0.3080	D_fake: -0.1492
+tick:     1	kimg:  560.000	depth: 3	alpha: 0.60	minibatch_size: 16	time: 0:04:41.211078	sec.tick: 281.2	sec.kimg: 28.1	G_loss: 0.4226	D_loss: -0.2244	D_real: -0.1574	D_fake: -0.1257
+tick:     2	kimg:  570.000	depth: 3	alpha: 0.70	minibatch_size: 16	time: 0:08:50.839116	sec.tick: 249.6	sec.kimg: 25.0	G_loss: 0.5791	D_loss: -0.2199	D_real: 0.0286 	D_fake: -0.3082
+tick:     3	kimg:  580.000	depth: 3	alpha: 0.80	minibatch_size: 16	time: 0:13:01.158944	sec.tick: 250.3	sec.kimg: 25.0	G_loss: 0.5843	D_loss: -0.2195	D_real: -0.0014	D_fake: -0.2762
+tick:     4	kimg:  590.000	depth: 3	alpha: 0.90	minibatch_size: 16	time: 0:17:03.187711	sec.tick: 242.0	sec.kimg: 24.2	G_loss: 0.4864	D_loss: -0.2313	D_real: -0.0964	D_fake: -0.1892
+tick:     5	kimg:  600.000	depth: 3	alpha: 1.00	minibatch_size: 16	time: 0:21:03.058500	sec.tick: 239.9	sec.kimg: 24.0	G_loss: 0.5863	D_loss: -0.2112	D_real: -0.0032	D_fake: -0.2641
+tick:     6	kimg:  610.000	depth: 3	alpha: 1.00	minibatch_size: 16	time: 0:25:03.397361	sec.tick: 240.3	sec.kimg: 24.0	G_loss: 0.5597	D_loss: -0.2175	D_real: -0.0163	D_fake: -0.2553
+tick:     7	kimg:  620.000	depth: 3	alpha: 1.00	minibatch_size: 16	time: 0:29:01.162397	sec.tick: 237.8	sec.kimg: 23.8	G_loss: 0.5569	D_loss: -0.2308	D_real: -0.0273	D_fake: -0.2621
+tick:     8	kimg:  630.000	depth: 3	alpha: 1.00	minibatch_size: 16	time: 0:33:01.107258	sec.tick: 239.9	sec.kimg: 24.0	G_loss: 0.5395	D_loss: -0.2025	D_real: -0.0127	D_fake: -0.2416
+tick:     9	kimg:  640.000	depth: 3	alpha: 1.00	minibatch_size: 16	time: 0:37:00.415823	sec.tick: 239.3	sec.kimg: 23.9	G_loss: 0.5251	D_loss: -0.1988	D_real: 0.0022 	D_fake: -0.2536
+tick:    10	kimg:  650.000	depth: 3	alpha: 1.00	minibatch_size: 16	time: 0:41:00.838585	sec.tick: 240.4	sec.kimg: 24.0	G_loss: 0.4808	D_loss: -0.1990	D_real: -0.0511	D_fake: -0.2008
+tick:    11	kimg:  660.000	depth: 3	alpha: 1.00	minibatch_size: 16	time: 0:45:00.825373	sec.tick: 240.0	sec.kimg: 24.0	G_loss: 0.4203	D_loss: -0.2068	D_real: -0.1362	D_fake: -0.1282
+tick:    12	kimg:  670.000	depth: 3	alpha: 1.00	minibatch_size: 16	time: 0:48:59.249413	sec.tick: 238.4	sec.kimg: 23.8	G_loss: 0.5014	D_loss: -0.1790	D_real: 0.0042 	D_fake: -0.2326
+tick:    13	kimg:  680.000	depth: 3	alpha: 1.00	minibatch_size: 16	time: 0:52:57.181954	sec.tick: 237.9	sec.kimg: 23.8	G_loss: 0.5236	D_loss: -0.1981	D_real: -0.0132	D_fake: -0.2385
+tick:    14	kimg:  690.000	depth: 3	alpha: 1.00	minibatch_size: 16	time: 0:56:56.738411	sec.tick: 239.6	sec.kimg: 24.0	G_loss: 0.6022	D_loss: -0.2036	D_real: 0.0777 	D_fake: -0.3341
+tick:    15	kimg:  700.000	depth: 4	alpha: 0.00	minibatch_size: 16	time: 1:00:58.334720	sec.tick: 241.6	sec.kimg: 24.2	G_loss: 0.4132	D_loss: -0.2134	D_real: -0.0750	D_fake: -0.1896
+tick:    16	kimg:  710.000	depth: 4	alpha: 0.10	minibatch_size: 16	time: 1:06:26.176339	sec.tick: 327.8	sec.kimg: 32.8	G_loss: 3.4818	D_loss: 1115.8721	D_real: 27.0158	D_fake: 13.2623
+tick:    17	kimg:  720.000	depth: 4	alpha: 0.20	minibatch_size: 16	time: 1:11:28.630213	sec.tick: 302.5	sec.kimg: 30.2	G_loss: 6.8247	D_loss: 8.1952   	D_real: 10.1156	D_fake: -6.7849
